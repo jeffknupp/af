@@ -15,15 +15,26 @@ var indexColor = color.New(color.FgYellow).SprintFunc()
 var occurenceColor = color.New(color.BgYellow, color.FgBlack).SprintFunc()
 var fileColor = color.New(color.FgGreen, color.Bold)
 
+var semaphore = make(chan int, 10)
+
 var target string
 var filesRead int
 
 func main() {
 	target = os.Args[1]
 	files := Walk(os.Args[2])
+	fileChan := make(chan string)
+	go func() {
+		for {
+			file := <-fileChan
+			filesRead++
+			go inspectFile(file)
+		}
+	}()
 	for _, file := range files {
-		inspectFile(file)
+		fileChan <- file
 	}
+	<-semaphore
 	fmt.Printf("Read %d files", filesRead)
 }
 
@@ -54,6 +65,7 @@ func Walk(path string) []string {
 }
 
 func inspectFile(path string) {
+	semaphore <- 1
 	input, err := os.Open(path)
 	if err != nil {
 		fmt.Printf("File open error: %v", err)
@@ -81,4 +93,5 @@ func inspectFile(path string) {
 			fmt.Printf("%s:%s\n", indexColor(index), line)
 		}
 	}
+	<-semaphore
 }
