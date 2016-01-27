@@ -15,33 +15,58 @@ var indexColor = color.New(color.FgYellow).SprintFunc()
 var occurenceColor = color.New(color.BgYellow, color.FgBlack).SprintFunc()
 var fileColor = color.New(color.FgGreen, color.Bold)
 
-var emptyList = []string{}
 var target string
+var filesRead int
 
 func main() {
 	target = os.Args[1]
-	err := filepath.Walk(os.Args[2], inspectFile)
-	if err != nil {
-		fmt.Printf("Glob error: %v", err)
-		os.Exit(1)
+	files := Walk(os.Args[2])
+	for _, file := range files {
+		inspectFile(file)
 	}
+	fmt.Printf("Read %d files", filesRead)
 }
-func inspectFile(path string, info os.FileInfo, err error) error {
-	if info.IsDir() {
+
+func Walk(path string) []string {
+	root, err := os.Open(path)
+	if err != nil {
+		fmt.Printf("Error: %v", err)
 		return nil
 	}
+	entries, err := root.Readdir(-1)
+	if err != nil {
+		fmt.Printf("Error: %v", err)
+		return nil
+	}
+
+	files := []string{}
+	for _, entry := range entries {
+		name := filepath.Join(path, entry.Name())
+		if entry.IsDir() {
+			if strings.HasSuffix(name, "/.git") {
+				continue
+			}
+			files = append(files, Walk(name)...)
+		}
+		files = append(files, name)
+	}
+	return files
+}
+
+func inspectFile(path string) {
 	input, err := os.Open(path)
 	if err != nil {
 		fmt.Printf("File open error: %v", err)
 		os.Exit(1)
 	}
+
 	occurrences := []string{}
 	scanner := bufio.NewScanner(input)
 	scanner.Split(bufio.ScanLines)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if http.DetectContentType([]byte(line)) == "application/octet-stream" {
-			return nil
+			return
 		}
 		if strings.Contains(line, target) {
 			occurrences = append(occurrences, line)
@@ -56,5 +81,4 @@ func inspectFile(path string, info os.FileInfo, err error) error {
 			fmt.Printf("%s:%s\n", indexColor(index), line)
 		}
 	}
-	return nil
 }
